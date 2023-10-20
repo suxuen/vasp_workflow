@@ -1,0 +1,34 @@
+Calculation_Type:
+  Rescale: false
+  Type: bulk
+INCAR_Tags:
+  0 Step:
+    AGGAC: 0.0
+    AUTO_NODES: 1
+    EDIFF: 1.0e-06
+    GGA: MK
+    ISIF: 7
+    ISMEAR: -5
+    LASPH: true
+    LNONCOLLINEAR: true
+    LSORBIT: true
+    LUSE_VDW: true
+    LWAVE: true
+    NBANDS: 200
+    NPAR: 1
+    PARAM1: 0.1234
+    PARAM2: 1.0
+    PREC: High
+    SIGMA: 0.03
+KPOINTs:
+  0 Step:
+    Force Gamma: true
+    Grid Density: 2000
+    Type: automatic_density
+MPIDs: {}
+Magnetization_Scheme:
+  Max_antiferro: 5
+  Scheme: FM+AFM
+Max_Submissions: 5
+PATHs: {}
+Relaxation_Set: MPRelaxSet

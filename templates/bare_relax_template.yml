@@ -1,0 +1,56 @@
+Calculation_Type:
+  Rescale: true
+  Type: bulk
+INCAR_Tags:
+  0 Step:
+    ALGO: Fast
+    AUTO_TIME: 24
+    EDIFF: 0.001
+    EDIFFG: -0.8
+    ENCUT: 520
+    IBRION: 3
+    ICHARG: 2
+    IOPT: 7
+    ISMEAR: 0
+    ISTART: 0
+    ISYM: 0
+    LDAU: false
+    LORBIT: 11
+    NELM: 80
+    NELMIN: 10
+    NPAR: 1
+    NSW: 5000
+    POTIM: 0.0
+    PREC: Normal
+  1 Step:
+    EDIFF: 1.0e-05
+    EDIFFG: -0.1
+    ISMEAR: -4
+    NELM: 60
+    NELMIN: 4
+  2 Step:
+    EDIFF: 1.0e-06
+    EDIFFG: -0.03
+    ICHARG: 1
+    ISTART: 1
+    NELM: 100
+    PREC: Accurate
+  3 Step:
+    LAECHG: true
+    NELM: 500
+    NSW: 0
+KPOINTs:
+  0 Step:
+    Force Gamma: false
+    Grid Density: 300
+    Type: automatic_density
+  1 Step:
+    Grid Density: 1000
+    Type: automatic_gamma_density
+MPIDs: {}
+Magnetization_Scheme:
+  Max_antiferro: 25
+  Scheme: FM+AFM
+Max_Submissions: 5
+PATHs: {}
+Relaxation_Set: MPRelaxSet

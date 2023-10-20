@@ -1,0 +1,41 @@
+Calculation_Type:
+  Rescale: false
+  Type: bulk
+INCAR_Tags:
+  0 Step:
+    ALGO: All
+    AUTO_NODES: 4
+    AUTO_TIME: 4
+    EDIFF: 1.0e-06
+    ENCUT: 600
+    ISIF: 3
+    ISMEAR: 0
+    KPAR: 4
+    LASPH: true
+    LPLANE: true
+    LSCALU: false
+    LWAVE: true
+    METAGGA: SCAN
+    NPAR: 12
+    NSIM: 4
+    NSW: 99
+    PREC: High
+    SIGMA: 0.03
+  1 Step:
+    EDIFF: 1.0e-08
+    NELM: 500
+    NSW: 0
+  2 Step:
+    KPAR: 1
+    NPAR: 1
+KPOINTs:
+  0 Step:
+    Force Gamma: true
+    Grid Density: 2000
+    Type: automatic_density
+MPIDs: {}
+Magnetization_Scheme:
+  Scheme: FM
+Max_Submissions: 5
+PATHs: {}
+Relaxation_Set: MPScanRelaxSet
