@@ -17,11 +17,8 @@ calculations on SLURM HPC clusters.
 
 - Added **Kestrel** cluster support (queue routing and submission logic) in `vasp_run/vasp.py`
 - Added **Alpine** cluster support (CU Boulder's HPC) in the SLURM job-script template
-- Wired up **noncollinear / spin-orbit-coupling (SOC)** capability - added and fixed
-  `VASP_NCL` environment variable that flows from job submission through template
-  rendering to VASP binary selection (previously a path hardcoded to a colleague's
-  home directory), plus a guard that errors out on invalid SOC + forced-gamma-point
-  configurations instead of silently submitting a broken run
+- Added and fixed **noncollinear / spin-orbit-coupling (SOC)** capability - 
+  `VASP_NCL` environment variable now read and written properly when generating slurm submission script
 - Fixed sub-hour walltime handling in the job-time templating (previously truncated
   fractional `AUTO_TIME` values down to whole hours)
 - Generalized the SLURM `--account` flag to more HPC clusters (previously Eagle-only) and
@@ -40,20 +37,20 @@ flowchart LR
 
 1. **Generate VASP input files** - can be done with built in `create_input_yaml.py` and `generate_vasp_inputs.py` or externally. For my use case, I typically generate my inputs using a separate notebook.
 2. **Organize VASP inputs into separate folders** e.g. for 2 calculations:
-   halide_perov_PBE
-   - CsPbBr3
-      - POSCAR
-      - POTCAR
-      - KPOINTS
-      - INCAR
-      - CONVERGENCE (needed for automating multi-stage runs)
-   - CsSnI3
-      - POSCAR
-      - POTCAR
-      - KPOINTS
-      - INCAR
-      - CONVERGENCE (needed for automating multi-stage runs)
-3. **`rerun_workflow.py` in calculation folder (e.g. in halide_perov_PBE directory)** - Walks the input folder tree, checks if jobs are multi or single step (`CONVERGENCE`), checks SLURM queue state, parses `vasprun.xml` for electronic/ionic convergence, and manages multi-stage runs, resubmits stalled single points with more electronic steps.
+   - halide_perov_PBE (calculation folder)
+      - CsPbBr3 (subfolder)
+         - POSCAR
+         - POTCAR
+         - KPOINTS
+         - INCAR
+         - CONVERGENCE (needed for automating multi-stage runs)
+      - CsSnBr3
+         - POSCAR
+         - POTCAR
+         - KPOINTS
+         - INCAR
+         - CONVERGENCE (needed for automating multi-stage runs)
+3. **`rerun_workflow.py`** - can be run  in calculation folder (e.g. halide_perov_PBE directory) or subfolders (e.g. CsPbBr3). Walks the input folder tree, checks if jobs are multi or single step (`CONVERGENCE`), checks SLURM queue state, parses `vasprun.xml` for electronic/ionic convergence, and manages multi-stage runs, resubmits stalled single points with more electronic steps.
 
 ## Tech stack
 
