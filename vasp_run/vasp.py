@@ -159,7 +159,9 @@ def restart_vasp(dir):
 
 
 def get_queue(computer, jobtype, time, nodes):
-    if computer == "janus":
+    if computer == 'kestrel':
+        return 'standard'
+    elif computer == "janus":
         if time <= 24:
             return 'janus'
         elif time > 24:
@@ -361,9 +363,21 @@ if __name__ == '__main__':
     # Set Time
     if args.time == 0:
         if 'AUTO_TIME' in incar:
-            time = int(incar["AUTO_TIME"])
+            if float(incar["AUTO_TIME"])<= 1:
+              if float(incar["AUTO_TIME"])>= 0.59:
+                time = 1
+              else:
+                time = float(incar["AUTO_TIME"])
+            else:
+              time = int(incar["AUTO_TIME"])
         elif 'VASP_DEFAULT_TIME' in os.environ:
-            time = int(os.environ['VASP_DEFAULT_TIME'])
+            if float(os.environ['VASP_DEFAULT_TIME'])<= 1:
+              if float(os.environ['VASP_DEFAULT_TIME'])>= 0.59:
+                time = 1
+              else:
+                time = float(os.environ['VASP_DEFAULT_TIME'])
+            else:
+              time = int(os.environ['VASP_DEFAULT_TIME'])
         else:
             time = 20
     else:
@@ -405,14 +419,20 @@ if __name__ == '__main__':
         mem = 0
 
     # What version of VASP to run
-    if args.gamma:
+    if 'LSORBIT' in incar and incar['LSORBIT']:
+        if ('AUTO_GAMMA' in incar and incar['AUTO_GAMMA']) or args.gamma:
+          print('ERROR: SOC (LSORBIT=TRUE) in INCAR but force vasp_gam? Submission script NOT written, check INCAR and vasp.py/rerun_workflow.py\'s args')
+          exit()
+        vasp_kpts = os.environ["VASP_NCL"]
+    elif args.gamma:
         vasp_kpts = os.environ["VASP_GAMMA"]
-    elif 'AUTO_GAMMA' in incar and incar['AUTO_GAMMA']:
-        vasp_kpts = os.environ["VASP_GAMMA"]
-    elif 'AUTO_GAMMA' in incar and not incar['AUTO_GAMMA']:
-        vasp_kpts = os.environ["VASP_KPTS"]
     else:
-        vasp_kpts = os.environ["VASP_KPTS"]
+      if 'AUTO_GAMMA' in incar and incar['AUTO_GAMMA']:
+          vasp_kpts = os.environ["VASP_GAMMA"]
+      elif 'AUTO_GAMMA' in incar and not incar['AUTO_GAMMA']:
+          vasp_kpts = os.environ["VASP_KPTS"]
+      else:
+          vasp_kpts = os.environ["VASP_KPTS"]
 
     # Get number of cores
     if args.cores:
@@ -437,7 +457,10 @@ if __name__ == '__main__':
     else:
         openmp = 1
 
-    if computer == 'janus' or computer == 'rapunzel' or computer == 'eagle':
+    if computer == 'kestrel':
+        queue_type = 'slurm'
+        submit = 'sbatch '
+    elif computer == 'janus' or computer == 'rapunzel' or computer == 'eagle':
         queue_type = 'slurm'
         submit = 'sbatch '
     elif computer == 'summit':
@@ -478,6 +501,7 @@ if __name__ == '__main__':
         'mpi': os.environ["VASP_MPI"],
         'vasp_kpts': os.environ["VASP_KPTS"],
         'vasp_gamma': os.environ["VASP_GAMMA"],
+        'vasp_ncl': os.environ["VASP_NCL"],
         'vasp_bashrc': (os.environ['VASP_BASHRC']
                         if 'VASP_BASHRC' in os.environ
                         else '~/.bashrc_vasp'),
@@ -497,7 +521,7 @@ if __name__ == '__main__':
     with open(script, 'r') as f:
         data = f.readlines()
 
-    data[9] = str(account_line)+'\n'
+#    data[9] = str(account_line)+'\n'
     with open(script, 'w') as f:
         f.writelines(data)
 

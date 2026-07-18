@@ -10,6 +10,7 @@ from pymatgen.io.vasp.inputs import Poscar
 from pymatgen.io.vasp.outputs import Vasprun
 
 def check_path_exists(path):
+    # check if path exists, return True or False. Honestly not a necessary function, but I like to have it for clarity.
     # called in check_vasp_input, among others
     if os.path.exists(path):
         return True
@@ -75,6 +76,8 @@ def get_single_job_name(pwd):
     return job_name
 
 def jobs_in_queue():
+    # gets a dictionary of all jobs in user's slurm queue with their status
+    # dict format: {job directory: job status}
     # called in not_in_queue
     p = subprocess.Popen(['squeue' ,'-o', '"%Z %T"'], stdout=subprocess.PIPE)
     #can be user specific, add -u username
@@ -93,19 +96,31 @@ def not_in_queue(path):
     all_jobs_dict = jobs_in_queue()
 
     if path not in all_jobs_dict:
+        # job is not in queue, return True to continue processing in  vasp_run_main
         return True
     elif all_jobs_dict[path] == 'COMPLETING' or all_jobs_dict[path] == 'COMPLETED':
+        # job is in queue but has completed, return True to continue processing in vasp_run_main
         return True
     else:
+        # job is in queue and has not completed, return status to print in vasp_run_main
         return all_jobs_dict[path]
 
 def is_converged(path):
+    '''
+    Checks if a VASP job has converged. Return values are used to identify job type
+    input: The path to the VASP job directory.
+    Returns:
+        - 'multi' if the job is a multi-step job and has not converged.
+        - 'single' if the job is a single-step job and has not converged.
+        - 'converged' if the job has converged.
+    '''
     # called in vasp_run_main
     job_name = get_job_name(path)
     rerun = False
     if not_in_queue(path) == True:  # Continue if job is not in queue
         if 'STAGE_NUMBER' in open(os.path.join(path, 'INCAR')).read():
             if os.path.exists(os.path.join(path, 'CONVERGENCE')):
+                # gets the number of stages in the multistep job from the CONVERGENCE file
                 with open('CONVERGENCE') as fd:
                     pairs = (line.split(None) for line in fd)
                     res   = {int(pair[0]):pair[1] for pair in pairs if len(pair) == 2 and pair[0].isdigit()}
@@ -116,7 +131,10 @@ def is_converged(path):
                                  to run multistep job. Delete STAGE_NUMBER tag \
                                  from INCAR for single step job.')
 
+            # check stage number in current INCAR
             current_stage_number = get_incar_value(path, 'STAGE_NUMBER')
+            # compare to max stage number in CONVERGENCE file. 
+            # if INCAR stage number is less than max stage number, rerun job. If equal, check vasprun.xml for convergence.
             if current_stage_number < max_stage_number:
                 rerun = 'multi'    #RERUN JOB
                 print('Rerunning ' + job_name + ' stage ' + str(current_stage_number) + ' of ' + str(max_stage_number))
@@ -136,9 +154,10 @@ def is_converged(path):
                 else:
                     print(job_name + ' Complete and ready for post processing.') #Job complete. Can perform post processing (bader lobster bandstructure defects adsorbates etc.)
                     rerun = 'converged'
-            elif 'IMAGES' in open(os.path.join(path,'INCAR')).read():
-                print('DOES NOT HANDLE NEB YET')
+            # elif 'IMAGES' in open(os.path.join(path,'INCAR')).read():
+            #     print('DOES NOT HANDLE NEB YET')
             else:
+                # for jobs with no STAGE_NUMBER tag in INCAR, check vasprun.xml for convergence
                 V = Vasprun(os.path.join(path, 'vasprun.xml'))
                 if V.converged != True:        #Job not converge
                     if V.converged_electronic != True:
@@ -206,11 +225,14 @@ def vasp_run_main(pwd):
                     print('#********************************************#\n')
                     job_name = get_job_name(root)
                     if not_in_queue(root) == True:
+                        # True = continue processing in vasp_run_main
+                        # False = job is in queue and has not completed, print status for user
                         if check_path_exists(os.path.join(root, 'vasprun.xml')):
                             try:
                                 V = Vasprun(os.path.join(root, 'vasprun.xml'))
                                 fizzled = False
                             except:
+                                # if vasprun.xml is corrupted, the job has failed. Attempt to resubmit job.
                                 print(root, '  Fizzled job, check errors! Attempting to resubmit...')
                                 fizzled = True
                             if fizzled == False:
@@ -249,6 +271,7 @@ def vasp_run_main(pwd):
 
         if len(list(completed_jobs['PATHs'].keys())) == num_jobs_in_workflow:
             print('\n  ALL JOBS HAVE CONVERGED!  \n')
+            # rewrite WORKFLOW_CONVERGENCE file to indicate that the workflow has fully converged
             with open(os.path.join(pwd, 'WORKFLOW_CONVERGENCE'), 'w') as f:
                 f.write('WORKFLOW_CONVERGED = True')
                 f.close()
@@ -258,11 +281,14 @@ def vasp_run_main(pwd):
 def driver():
     pwd = os.getcwd()
     num_jobs_in_workflow = check_num_jobs_in_workflow(pwd)
-
+    
+    # label the workflow as not converged at the start of the run, change after run
     with open(os.path.join(pwd, 'WORKFLOW_CONVERGENCE'), 'w') as f:
         f.write('WORKFLOW_CONVERGED = False')
         f.close()
-
+    
+    # user should assign a name to the workflow if running more than one job (dir) at a time.
+    # If run in calculation dir (single job), the job will be named after the dir name
     if num_jobs_in_workflow > 1:
         if check_path_exists(os.path.join(pwd, 'WORKFLOW_NAME')):
             workflow_file = Incar.from_file(os.path.join(pwd, 'WORKFLOW_NAME'))

@@ -1,22 +1,17 @@
 #!/bin/bash
 {% if queue_type == "slurm" %}#SBATCH -J {{ name }}
-{% if time >= 1%}#SBATCH --time={{ time }}:00:00 {% elif time < 1%}#SBATCH --time=00:{{(time*100) | int }}:00{% endif %}
+#SBATCH --time={{ time }}:00:00
 #SBATCH -o {{ name }}.o%j
 #SBATCH -e {{ name }}.e%j
+#SBATCH --mem={{ mem }}
 #SBATCH --tasks {{ tasks }}
 #SBATCH --nodes {{ nodes }}
-#SBATCH --mem={{ mem }}
-#SBATCH --ntasks-per-node {{ cores }}
-#SBATCH --account={{ account }}
-{% if computer == "summit"%}#SBATCH --qos {{ queue }}
-#SBATCH --export=NONE
-#SBATCH -N {{ nodes }}
-{% elif computer == "alpine"%}#SBATCH --qos {{ queue }}
-#SBATCH --export=NONE
-#SBATCH -N {{ nodes }}
-#SBATCH --constraint=ib {% endif %}
+#SBATCH --ntasks-per-node {{ ppn }}
 {% if nodes == 1 and computer == "janus"%}#SBATCH --reservation=janus-serial {% endif %}
-
+{% if computer == "summit" %}#SBATCH --qos {{ queue }}
+#SBATCH --export=NONE
+#SBATCH -N {{ nodes }} {% endif %}
+{% if computer == "eagle" %}#SBATCH --account={{ account }} {% endif %}
 {% elif queue_type == "pbs" %}#PBS -j eo
 #PBS -l nodes={{ nodes }}:ppn={{ ppn }}{% if computer == "psiops" %}:{{ queue }}{% endif %}
 #PBS -l walltime={{ time }}:00:00
@@ -24,8 +19,7 @@
 #PBS -N {{ name }}
 {% if computer == "peregrine" %}#PBS -A {{ account }}{% endif %}
 cd $PBS_O_WORKDIR
-echo $PBS_O_WORKDIR
-{% endif %}
+echo $PBS_O_WORKDIR{% endif %}
 
 {% block environment %}
 # Set Environment
@@ -65,3 +59,4 @@ c.run()
 {% endblock python %}
 "
 {% endblock vasp %}
+

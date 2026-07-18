@@ -1,1 +1,1 @@
-MP_api_key = 'diPAM4AHoKwSLNfS1B'
+MP_api_key = 'kBB5Er8F6fwICxypF'

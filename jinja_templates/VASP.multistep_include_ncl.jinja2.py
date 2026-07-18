@@ -6,12 +6,14 @@ import Upgrade_Run
 import logging
 import copy
 
+
 FORMAT = '%(asctime)s %(message)s'
 logging.basicConfig(format=FORMAT, level=logging.INFO, filename='run.log')
 jobtype = '{{ jobtype }}'
 vasp_kpts = '{{ vasp_kpts }}'
 vasp_gamma =  '{{ vasp_gamma }}'
 vasp_ncl = '{{ vasp_ncl }}'
+
 
 if jobtype == 'NEB':
     handlers = [NEBWalltimeHandler({{ time }}*60*60, min(30*60, {{ time }}*60*60/20), electronic_step_stop=True)]
@@ -59,8 +61,9 @@ def get_runs(max_steps=100):
         else:
             final = False
         if ('LNONCOLLINEAR' in incar or 'LSORBIT' in incar):
-            #vasp = vasp_ncl
-            vasp ='/home/rtrottie/programs/vasp/5.4.4.2019/bin/vasp_ncl'
+            vasp = vasp_ncl
+            #vasp ='/home/suxuen/software/vasp.5.4.4_VASPsol/bin/vasp_ncl' #NEW path on Kestrel           
+            #vasp ='/home/rtrottie/programs/vasp/5.4.4.2019/bin/vasp_ncl'  #OLD path from Eagle
         elif ('AUTO_GAMMA' in incar and incar['AUTO_GAMMA']):
             vasp = os.environ['VASP_GAMMA']
         else:

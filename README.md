@@ -1,199 +1,135 @@
 # vasp_workflow
-`vasp_workflow` can be used to rapidly generate and submit
-[VASP](https://www.vasp.at/) jobs to SLURM supercomputing clusters. Currently
-supported clusters include the National Renewable Energy Laboratory's (NREL)
-[Eagle](https://www.nrel.gov/hpc/eagle-system.html), with plans to support
-CU Boulder's [Summit](https://www.colorado.edu/rc/resources/summit) on the horizon.
 
-## Overview
+High-throughput orchestration for [VASP](https://www.vasp.at/) density-functional-theory
+calculations on SLURM/PBS HPC clusters. Turns a single YAML config — a set of structures
+plus calculation parameters — into hundreds of correctly-configured VASP input decks,
+submits them to a queue, and automatically monitors, reruns, and advances unconverged
+jobs until the whole batch is done.
 
-### Environmental Requirements (Perform Once)
-1. Clone the repository into your home directory with the following command:
-`git clone https://github.com/rymo1354/vasp_workflow.git`. You should now have
-the `vasp_workflow` directory in your home directory.  
+> **Background:** This workflow was originally developed by my PhD mentor
+> [Ryan Morelock](https://github.com/rymo1354) for the Musgrave research group
+> at CU Boulder, targeting NREL's Eagle cluster
+> (see the [upstream repository](https://github.com/rymo1354/vasp_workflow)).
+> I'm an active contributor and user of this shared lab tool; this fork contains my
+> extensions for running the workflow on additional HPC systems and for
+> noncollinear/spin-orbit-coupling calculations.
 
-2. Append the absolute path of the `.../vasp_workflow` directory to the `$PATH` and `$PYTHONPATH` variables
-within your `.bash_profile` or `.bashrc`. One of these should be in your home
-directory. Do the same with the absolute path of `.../vasp_workflow/workflow_scripts`.
-The absolute path can be found by navigating to the `vasp_workflow` directory and using the `pwd` command.
+## My contributions
 
-3. The file `.../vasp_workflow/vasp_run/vasp.py` uses scripts found in Ryan Trottier's
-`VTST-Tools` directory. If this path isn't already in your `.bash_profile` or `.bashrc`,
-add `/home/rtrottie/bin/VTST-Tools/` to your $PATH and $PYTHONPATH variables.
+- Added **Kestrel** cluster support (queue routing and submission logic) in `vasp_run/vasp.py`
+- Added **Alpine** cluster support (CU Boulder's HPC) in the SLURM job-script template
+- Wired up **noncollinear / spin-orbit-coupling (SOC) runs end-to-end** — added a
+  `VASP_NCL` environment variable that flows from job submission through template
+  rendering to VASP binary selection (previously a path hardcoded to a colleague's
+  home directory), plus a guard that errors out on invalid SOC + forced-gamma-point
+  configurations instead of silently submitting a broken run
+- Fixed sub-hour walltime handling in the job-time templating (previously truncated
+  fractional `AUTO_TIME` values down to whole hours)
+- Generalized the SLURM `--account` flag to all clusters (previously Eagle-only) and
+  fixed related node-count templating for Summit/Alpine
+- Fixed a pymatgen input-validation bug (`validate_magmom`) that was blocking input-file
+  generation for enumerated magnetic orderings
 
-4. Load the `vasp_workflow` conda environment from `/home/rmorelock/.conda-envs/vasp_workflow`. On Eagle,
- execute `module load conda` to load Eagle's default conda environment. You can then run
- `conda activate /home/rmorelock/.conda-envs/vasp_workflow` to load the appropriate vasp_workflow environment.
- (Note: you may need to run `conda init bash` to make your default shell bash, thereby enabling the `conda activate` command.) You can also add `conda activate /home/rmorelock/.conda-envs/vasp_workflow` to an alias within your
-`.bash_profile` or `.bashrc` for easier activation.
+## How it works
 
-The `vasp_workflow` environment should have the following packages (among others):
-* pymatgen
-* pyyaml
-* pycodestyle
+```mermaid
+flowchart LR
+    A["create_input_yaml.py\nbuild a YAML job spec"] --> B["generate_vasp_inputs.py\nMP-IDs / POSCARs to INCAR, KPOINTS,\nPOTCAR, magnetic orderings, defects"]
+    B --> C["vasp.py\nrender SLURM/PBS script,\nsubmit to cluster"]
+    C --> D["rerun_workflow.py\npoll queue, check convergence,\nresubmit or advance stage"]
+    D -->|not converged| C
+    D -->|all converged| E["*_converged.json\n+ WORKFLOW_CONVERGENCE"]
+```
 
-You can check for these packages using the `conda list` command. You can also create your own environment and install these packages
-with the following commands:
-* `conda install -c conda-forge pymatgen`
-* `conda install -c anaconda pyyaml`
-* `conda install -c conda-forge pycodestyle`
+1. **`create_input_yaml.py`** — interactive CLI that builds a YAML config: which
+   structures to run (Materials Project IDs and/or local POSCAR paths), calculation
+   type (bulk or point defect), magnetic-ordering scheme (preserve / FM / AFM /
+   FM+AFM enumeration), relaxation set, and per-stage INCAR/KPOINTS settings for
+   multi-step convergence.
+2. **`generate_vasp_inputs.py`** — reads that YAML, pulls structures from the
+   Materials Project or disk, applies magnetic-ordering enumeration and supercell
+   rescaling, and writes a full directory tree of VASP input decks (`INCAR`,
+   `KPOINTS`, `POTCAR`, `POSCAR`, `CONVERGENCE`) via `pymatgen`.
+3. **`vasp.py`** — detects job type and target cluster, resolves walltime/nodes/cores/
+   queue from `INCAR` tags or environment defaults, renders a Jinja2 SLURM/PBS batch
+   script wrapping `custodian`'s error-handling VASP runner, and submits it.
+4. **`rerun_workflow.py`** — the operational core, typically run on a cron. Walks the
+   job tree, checks SLURM queue state, parses `vasprun.xml` for electronic/ionic
+   convergence, and either advances a multi-stage `CONVERGENCE` run, resubmits with
+   relaxed settings (e.g. more electronic steps), or marks the job complete — until
+   every job in the batch has converged.
 
-**Note** I've had issues using Pymatgen's [MPRester](https://pymatgen.org/pymatgen.ext.matproj.html)
-class in the `base` Eagle environment. For these reasons, try to use the
-`/home/rmorelock/.conda-envs/vasp_workflow` environment if at all possible.
+## Tech stack
 
-### Usage Requirements (Each Pull Request)
+Python · [pymatgen](https://pymatgen.org/) (VASP I/O, Materials Project API) ·
+[custodian](https://materialsproject.github.io/custodian/) (VASP error handling and
+recovery) · Jinja2 (SLURM/PBS templating) · YAML · SLURM / PBS
 
-4. Navigate to the [configuration](https://github.com/rymo1354/vasp_workflow/tree/master/configuration) folder. In `config.py`, set the `MP_api_key` variable to your Material's Project API key. It's currently set to my personal MP API key. This will need
-to be performed after each new pull request. Learn more at the Material's Project website
-[link](https://materialsproject.org/open).
+## Setup
 
-5. Run `python setup.py` in the `.../vasp_workflow` directory. This should make the
-`rerun_workflow.py`, `generate_vasp_inputs.py`, `create_input_yaml.py` and
-`vasp.py` scripts executable, if `.../vasp_workflow` and `.../vasp_workflow/workflow_scripts`
-are on your path AND pythonpath.
+1. Clone the repo and put the repo root and `workflow_scripts/` on your `$PATH` and
+   `$PYTHONPATH`.
+2. Install dependencies: `pymatgen`, `pyyaml`, `custodian`, `jinja2`.
+3. Materials Project API key: **[TODO before publishing]** — currently read from the
+   hardcoded `MP_api_key` variable in `configuration/mp_api.py`. Replace this with an
+   environment-variable read (e.g. `os.environ["MP_API_KEY"]`) before making this repo
+   public; get a free key [here](https://materialsproject.org/open).
+4. Set the cluster-specific environment variables `vasp.py` depends on: `VASP_KPTS`,
+   `VASP_GAMMA`, `VASP_NCL`, `VASP_MPI`, `VASP_TEMPLATE_DIR`, and optionally
+   `VASP_DEFAULT_TIME`, `VASP_DEFAULT_ALLOCATION`, `VASP_DEFAULT_QUEUE`.
 
-You should be ready to go! If you're having issues with the setup, please contact me
-at [myemail](mailto:rymo1354@colorado.edu).
+## Usage
 
-## create_input_yaml.py
+```bash
+# 1. Build a config from a template, editing structures and calc type interactively
+create_input_yaml.py -o my_run.yml -c templates/bare_relax_template.yml -e MPIDs Calculation_Type
 
-### Generating a .yml runfile
+# 2. Generate the VASP input directory tree for every structure / magnetic-ordering combination
+generate_vasp_inputs.py -r my_run.yml
 
-The first step for high-throughput calculations is the .yml runfile. This runfile
-is generated using the `create_input_yaml.py` script. This script uses the `writeyaml.py`
-module to generate the input .yml file. It takes three command line arguments:
+# 3. From within the generated bulk/ or defect/ directory, submit and monitor
+rerun_workflow.py
+```
 
-* `-o` or `--outfile_name`: name of file to write to (with .yml extension) (Required)
-* `-c` or `--copyfile_name`: name of file to copy (with .yml extension) (Optional)
-* `-e` or `--edit_fields`: name of fields to edit (can choose multiple) (Optional)
+Run `rerun_workflow.py` again (e.g. on a cron) to poll job status, auto-resubmit
+unconverged or fizzled jobs, and advance multi-stage convergence runs. Once every job
+in the tree has converged, it writes a `WORKFLOW_CONVERGENCE` marker file and a
+`<workflow_name>_converged.json` summary of all results.
 
-If no `-c` tag is supplied, the `Default Inputs` dictionary from `.../configuration/yml_write_parameters.json`
-is used. If `-c` is supplied, the new input dictionary is copied from a previously used dictionary. To
-edit an existing dictionary, simply make the `-c` and `-o` tags the same.
+## Configuration reference
 
-The `-e` tag specifies which fields will be edited. Currently supported fields are:
+The YAML config (see `templates/*.yml` for examples) fully specifies a batch run.
+Fields, as validated by `create_input_yaml.py`:
 
-* MPIDs
-* PATHs
-* Calculation_Type
-* Relaxation_Set
-* Magnetization_Scheme
-* INCAR_Tags
-* KPOINTs
-* Max_Submissions
+| Field | Purpose |
+|---|---|
+| `MPIDs` | Materials Project IDs to pull structures from (e.g. `mp-5223`); validated against the MP API before being added. |
+| `PATHs` | Local POSCAR/CONTCAR file paths to use as structures instead of/alongside MPIDs. |
+| `Calculation_Type` | `bulk` or `defect`. `Rescale` toggles automatic supercell rescaling; `defect` additionally takes an element symbol to remove one atom of (per symmetry-unique site). |
+| `Relaxation_Set` | Which pymatgen Materials Project input set to use as the INCAR/KPOINTS baseline (`MPRelaxSet`, `MPScanRelaxSet`, etc.). |
+| `Magnetization_Scheme` | `preserve`, `FM`, `AFM`, or `FM+AFM` — enumerates ferromagnetic and/or randomized antiferromagnetic orderings (with a max-count cap for AFM) for each structure. |
+| `INCAR_Tags` | Per-stage INCAR overrides for multi-step convergence (`0 Step` through `10 Step`). User tags override the relaxation set's defaults — take care with `LDAUU`/`LDAUJ`/`LDAUL`, which get fully overwritten rather than merged. |
+| `KPOINTs` | Per-stage KPOINTS generation scheme. `0 Step` supports all generation types; later stages are restricted to gamma-centered schemes, a constraint of the multi-step convergence runner. |
+| `Max_Submissions` | Accepted but not yet enforced. |
 
-If no `-e` is supplied, all existing fields and tags will be copied to the `-c`
-file path. Otherwise, the user will be prompted to modify the specified tags.
+`generate_vasp_inputs.py -r <file.yml>` consumes that config and writes a full `bulk/`
+or `defect/` directory tree of VASP input decks. Run it from the parent directory where
+you want the tree created; `POTCAR` generation requires pseudopotentials on `$PATH`.
 
-### MPIDs
+`rerun_workflow.py` is then run from that same parent directory to submit and, on
+subsequent runs, monitor/rerun jobs. If a job fails inside VASP due to bad input
+parameters or a bad VASP build, `custodian`'s error messages can be misleading — a
+plain bash submission script is often faster for tracking down the real error.
 
-Structures from the Material's Project can be used to get Vasp `POSCAR` files
-by changing the `MPIDs` tag. The user is able to add or remove mp-ids; mp-ids that
-are validated before they can be added to the .yml file. Example input for the
-materials with the mp-id 'mp-5223' would be `mp-5223`.
+## Known limitations
 
-### PATHs
+- `rerun_workflow.py` does not yet handle NEB (nudged elastic band) calculations
+- `Max_Submissions` in the YAML config is accepted but not yet enforced
+- A few environment expectations (conda environment location, VTST-Tools path) still
+  assume the original lab's shared HPC setup rather than a general-purpose install
 
-Absolute paths of files on the computing system can also be used to get `POSCAR`
-files. This files must be compatible with the `pymatgen.io.vasp.inputs.Poscar`
-class to be read correctly, i.e. both valid Vasp `POSCAR` inputs and `CONTCAR`
-outputs can be used. A more detailed description of how the `POSCAR` file is read
-can be found on the Materials Project [website](https://pymatgen.org/pymatgen.io.vasp.inputs.html)
+## Acknowledgments
 
-### Calculation_Type
-
-Currently supported calculation `Type` are `bulk` and `defect`. Other arguments
-include `Rescale` (automatic unit cell rescaling), as well as `Defect` for
-`defect` calculations. `Defect` takes as an argument the abbreviated element on
-which to perform the defect calculation (i.e. oxygen would be `O`).
-
-### Relaxation_Set
-
-Material's Project relaxation set used as the default for the calculation. Currently
-supported sets include those listed in `MP Relaxation Sets` from
-`.../configuration/yml_write_parameters.json`. More information about default
-Material's Project relax sets can be found [here](https://pymatgen.org/pymatgen.io.vasp.sets.html).
-
-### Magnetization_Scheme
-
-Currently supported options for `Magnetization_Scheme` are `preserve`, `FM`, `AFM`
-and `FM+AFM`. `preserve` maintains the original magnetism, `FM` performs a antiferromagnetic
-enumeration, `AFM` performs an antiferromagnetic enumeration assuming the Material's Project
-default magnetic spins, and `FM+AFM` does both a single ferromagnetic relaxation and
-antiferromagnetic relaxations. Number of antiferromagnetic enumerations considered
-should be specified if `AFM` or `FM+AFM` is chosen.
-
-If a material is not magnetic and `FM`, `AFM` or `FM+AFM` is supplied as the scheme,
-an alert will occur. The non-magnetized structure can still be generated, however.
-
-### INCAR_Tags
-
-Used to change the number of steps within a convergence calculation and the `INCAR`
-tags at each step. Currently supported `INCAR_Tags` include those tags listed in the
-`.../configuration/incar_parameters.json` file, as well as a few tags listed under
-`VTST Tags` in `.../configuration/yml_write_parameters.json`.
-
-These tags also allow for multi-step convergence schemes; currently supported step
-can be found in the `.../configuration/yml_write_parameters.json` under
-`Calculation_Steps`. Currently, steps `0 Step` through `10 Step` are supported.
-
-**Note** User-supplied `INCAR_Tags` override existing tags already included by the
-Materials Project relaxation set specified in the `Relaxation_Set` tag. Take special
-care with the `LDAUU, LDAUJ and LDAUL` tags: certain Material's Project relax set
-include these by default, and any user-supplied tags will overwrite all existing
-`LDAUU, LDAUJ and LDAUL` tags. For more information visit the relaxation set
-[link](https://pymatgen.org/pymatgen.io.vasp.sets.html).
-
-### KPOINTs
-
-Different `KPOINTs` tags for convergence steps can be supplied using the `KPOINTs`
-tag. Only steps that have been specified in `INCAR_Tags` can have user-supplied `KPOINTs`.
-`0 Step` tags have the option of all available KPOINT generation schemes as listed in
-`.../configuration/yml_write_parameters.json` under `KPOINTS Generation`. All other
-steps can only use `automatic_gamma_density` and `gamma_automatic`. This is due to
-the multi-step convergence code used to submit and process multi-step jobs.
-
-### Max_Submissions
-
-Currently not supported in existing scripts. Will likely be used in a multi  
-`Calculation_Type` workflow. This has not yet been implemented.  
-
-## generate_vasp_inputs.py
-
-### Generating the directory structure for VASP runs
-
-The second step for high-throughput calculations is to use a .yml runfile to
-generate the job submissions directory structure. This is performed with the
-`generate_vasp_inputs.py` script. This script uses the `runfile_generation.py`
-module. It takes a single command line argument:
-
-* `-r` or `--readfile_path`: name of input .yml to read from (Required)
-
-Navigate to the parent directory where you intend to generate the directories for
-VASP runs. Run `generate_vasp_inputs.py -r </path/to/your_file.yml>`. Given a valid input .yml
-file, the appropriate directory structure should be generated in the parent directory. Written
-files should include valid `POSCAR`, `KPOINTS`, `INCAR` and `CONVERGENCE` files. With
-the correct pseudopotentials in your `$PATH`, `POTCAR` files will also be written.
-
-**Note** For best results, and unless you are familiar with this workflow, you should
-use `create_input_yaml.py` for .yml generation. It has several checks to ensure that
-the appropriate tags and their supported values are correctly input into the input
-.yml file structure. Incorrect .yml files could disrupt file generation.
-
-## rerun_workflow.py
-
-### Submitting and re-running VASP jobs
-
-If the above file structure was correctly generated, you are now ready to submit jobs.
-Either a `bulk` or `defect` directory should have appeared in your parent directory. In
-the parent directory, execute `rerun_workflow.py`. If jobs have not yet been submitted,
-you will be prompted for a the name of this workflow. If jobs have already been submitted,
-you will see the status of those jobs by rerunning `rerun_workflow.py`. Any failed jobs or
-jobs that have reached their time limit will be stored in the directory system. To rerun these
-jobs, simply execute `rerun_workflow.py`  
-
-### Known Errors
-If a job fails out of VASP because you didn't use the correct input parameters and/or VASP
-compilation, custodian will report errors that do not make any sense. Use a simple bash
-submission script to figure out the error. 
+Originally developed by [Ryan Morelock](https://github.com/rymo1354). See the
+[upstream repository](https://github.com/rymo1354/vasp_workflow) for the original
+project and its full field-by-field configuration documentation.

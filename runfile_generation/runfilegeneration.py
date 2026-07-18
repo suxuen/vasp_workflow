@@ -266,6 +266,9 @@ class Magnetism:
 
             elif self.magnetization_dict['Scheme'] == 'FM':
                 self.magnetized_structures_dict[structure_key]['FM'] = ferro_structure
+                print(ferro_structure.site_properties)
+                print(type(ferro_structure.site_properties["magmom"]))
+                print(type(ferro_structure.site_properties["magmom"][0]))
                 self.unique_magnetizations[structure_key]['FM'] = ferro_structure.site_properties["magmom"]
 
             elif self.magnetization_dict['Scheme'] == 'AFM':
@@ -505,9 +508,15 @@ class WriteVaspFiles:
                                 user_incar_settings = self.incar_tags["0 Step"]
                             except:
                                 user_incar_settings = None
+#                            print(write_structure)
+#                            print(write_structure.properties)
+#                            for site in write_structure:
+#                                print(site.properties, type(site.properties["magmom"]))
+#                            print(write_structure.properties["magmom"][0],type(write_structure.properties["magmom"][0]))
                             v = relax_set(write_structure,
                                           user_incar_settings=user_incar_settings,
-                                          user_kpoints_settings=kpoints_object)
+                                          user_kpoints_settings=kpoints_object,
+                                          validate_magmom=False)
                             v.write_input(calculation_type_dir_path)
 
                             with open(os.path.join(calculation_type_dir_path,'CONVERGENCE'),'w') as f:
