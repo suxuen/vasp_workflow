@@ -11,8 +11,10 @@ jobs until the whole batch is done.
 > at CU Boulder, targeting NREL's Eagle cluster
 > (see the [upstream repository](https://github.com/rymo1354/vasp_workflow)).
 > I'm an active contributor and user of this shared lab tool; this fork contains my
-> extensions for running the workflow on additional HPC systems and for
-> noncollinear/spin-orbit-coupling calculations.
+> extensions for running the workflow on additional HPC systems and for 
+> noncollinear/spin-orbit-coupling calculations. Day to day, I generate 
+> VASP input files separately and rely on this repo primarily for job submission and 
+> management via rerun_workflow.py
 
 ## My contributions
 
@@ -25,10 +27,9 @@ jobs until the whole batch is done.
   configurations instead of silently submitting a broken run
 - Fixed sub-hour walltime handling in the job-time templating (previously truncated
   fractional `AUTO_TIME` values down to whole hours)
-- Generalized the SLURM `--account` flag to all clusters (previously Eagle-only) and
+- Generalized the SLURM `--account` flag to more HPC clusters (previously Eagle-only) and
   fixed related node-count templating for Summit/Alpine
-- Fixed a pymatgen input-validation bug (`validate_magmom`) that was blocking input-file
-  generation for enumerated magnetic orderings
+
 
 ## How it works
 
@@ -70,15 +71,15 @@ recovery) · Jinja2 (SLURM/PBS templating) · YAML · SLURM / PBS
 1. Clone the repo and put the repo root and `workflow_scripts/` on your `$PATH` and
    `$PYTHONPATH`.
 2. Install dependencies: `pymatgen`, `pyyaml`, `custodian`, `jinja2`.
-3. Materials Project API key: **[TODO before publishing]** — currently read from the
-   hardcoded `MP_api_key` variable in `configuration/mp_api.py`. Replace this with an
-   environment-variable read (e.g. `os.environ["MP_API_KEY"]`) before making this repo
-   public; get a free key [here](https://materialsproject.org/open).
+3. Materials Project API key: set the MP_api_key variable in configuration/mp_api.py to your own key 
+   (get a free one [here](https://materialsproject.org/open)).
 4. Set the cluster-specific environment variables `vasp.py` depends on: `VASP_KPTS`,
    `VASP_GAMMA`, `VASP_NCL`, `VASP_MPI`, `VASP_TEMPLATE_DIR`, and optionally
    `VASP_DEFAULT_TIME`, `VASP_DEFAULT_ALLOCATION`, `VASP_DEFAULT_QUEUE`.
 
 ## Usage
+
+The full pipeline below is the intended end-to-end flow; in practice I generate inputs separately and use rerun_workflow.py as the operational core for submission, monitoring, and resubmission.
 
 ```bash
 # 1. Build a config from a template, editing structures and calc type interactively
